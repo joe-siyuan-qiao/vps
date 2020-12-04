@@ -13,7 +13,7 @@ import multiprocessing
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--mode', type=str, default='val', help='train/val/test')
-parser.add_argument('--root_dir', type=str, default='data/city_ext/', help='root directory')
+parser.add_argument('--root_dir', type=str, default='.', help='root directory')
 args = parser.parse_args()
 
 MODE = args.mode
@@ -26,7 +26,7 @@ PANOPTIC_DIR = os.path.join(ROOT_DIR, MODE, 'panoptic_inst')
 os.makedirs(PANOPTIC_DIR, exist_ok=True)
 
 ####
-VOID = 255
+VOID = 32
 ID2CATINFO = {x['id']:x for x in CATEGORIES}
 
 def panoptic_single_core(proc_id, sem_files, inst_files, id_converter, ori2fcn):
@@ -43,15 +43,15 @@ def sem_inst2pan(sem_file, inst_file, id_converter, ori2fcn):
     sem_map = color_map[:,:,0] + \
                 color_map[:,:,1]*256 + \
                 color_map[:,:,2]*256*256 # 1 channel
-    
+
     inst_map = np.array(Image.open(inst_file))
-    pan_map = np.ones((sem_map.shape[0], sem_map.shape[1]), dtype=np.uint32)*VOID
-    label_map = np.ones((sem_map.shape[0], sem_map.shape[1]), dtype=np.uint8)*VOID
+    pan_map = np.ones((sem_map.shape[0], sem_map.shape[1]), dtype=np.uint32)*VOID*1000
+    label_map = np.ones((sem_map.shape[0], sem_map.shape[1]), dtype=np.uint8)*VOID*1000
 
     sem_ids = np.unique(sem_map)
     inst_ids = np.unique(inst_map)
 
-    # Stuff Classes  
+    # Stuff Classes
     for sem_id in sem_ids:
         if sem_id not in id_converter:
             continue
@@ -61,7 +61,7 @@ def sem_inst2pan(sem_file, inst_file, id_converter, ori2fcn):
         # Dont include Things classes in pan_map.
         if ID2CATINFO[fcn_id]['isthing'] == 1:
             continue
-        pan_map[mask] = fcn_id
+        pan_map[mask] = fcn_id * 1000
 
     # Things Classes
     for inst_id in inst_ids:
@@ -79,7 +79,7 @@ def sem_inst2pan(sem_file, inst_file, id_converter, ori2fcn):
         # Filter Stuff classes
         if ID2CATINFO[fcn_id]['isthing'] == 0:
             continue
-        pan_map[obj_mask] = fcn_id*1000 + obj_id
+        pan_map[obj_mask] = fcn_id * 1000 + obj_id
 
     return pan_map.astype(np.uint32), label_map.astype(np.uint8)
 
@@ -101,12 +101,12 @@ def panoptic_multi_core(sem_files, inst_files, id_converter, ori2fcn):
 
 
 def main():
-    
+
     id_converter = {x['color'][0]+x['color'][1]*256+x['color'][2]*256*256:x['id'] for x in CATEGORIES}
     ori2fcn = {x['ori_id'] : x['id'] for x in CATEGORIES}
     # panoptic video annotations
     start_pano = time.time()
-    print('==> %s/labelmap/, %s/panoptic_inst/ ...'%(MODE, MODE))  
+    print('==> %s/labelmap/, %s/panoptic_inst/ ...'%(MODE, MODE))
     # merge semantic segmentation and instance id map into panoptic format
     sem_files = [osp.join(SEMANTIC_DIR,x) for x in os.listdir(SEMANTIC_DIR) if '.png' in x]
     sem_files.sort()
@@ -114,7 +114,7 @@ def main():
     inst_files.sort()
     if not (len(sem_files) == len(inst_files)):
         raise ValueError('len semfiles != len inst_files')
-    panoptic_multi_core(sem_files, inst_files, id_converter, ori2fcn)          
+    panoptic_multi_core(sem_files, inst_files, id_converter, ori2fcn)
 
 if __name__=='__main__':
     main()
